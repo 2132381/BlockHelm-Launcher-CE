@@ -8,7 +8,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading.Channels;
-using Launcher.Application.Services;
 
 namespace Launcher.Infrastructure.Minecraft;
 
@@ -23,6 +22,7 @@ internal sealed class LaunchOutputCapture
     private const int TailLineCount = 120;
     private const long DefaultMaxOutputBytes = 32L * 1024 * 1024;
     private const int DefaultMaxLineCharacters = 16 * 1024;
+    private const string TruncatedLineSuffix = " …<line truncated>";
 
     private readonly string outputPath;
     private readonly IReadOnlyList<string> sensitiveValues;
@@ -114,7 +114,6 @@ internal sealed class LaunchOutputCapture
 
     private async Task PumpAsync(StreamReader reader, string source, Queue<string> tail)
     {
-        var redactor = new SensitiveLogText.LineRedactor(sensitiveValues);
         try
         {
             var buffer = new char[4096];
@@ -132,7 +131,7 @@ internal sealed class LaunchOutputCapture
                     var character = buffer[index];
                     if (character == '\r')
                     {
-                        await EmitLineAsync(source, tail, lineBuilder, lineWasTruncated, redactor).ConfigureAwait(false);
+                        await EmitLineAsync(source, tail, lineBuilder, lineWasTruncated).ConfigureAwait(false);
                         lineBuilder.Clear();
                         lineWasTruncated = false;
                         previousWasCarriageReturn = true;
@@ -143,7 +142,7 @@ internal sealed class LaunchOutputCapture
                     {
                         if (!previousWasCarriageReturn)
                         {
-                            await EmitLineAsync(source, tail, lineBuilder, lineWasTruncated, redactor).ConfigureAwait(false);
+                            await EmitLineAsync(source, tail, lineBuilder, lineWasTruncated).ConfigureAwait(false);
                             lineBuilder.Clear();
                             lineWasTruncated = false;
                         }
@@ -161,7 +160,7 @@ internal sealed class LaunchOutputCapture
             }
 
             if (lineBuilder.Length > 0 || lineWasTruncated)
-                await EmitLineAsync(source, tail, lineBuilder, lineWasTruncated, redactor).ConfigureAwait(false);
+                await EmitLineAsync(source, tail, lineBuilder, lineWasTruncated).ConfigureAwait(false);
         }
         catch (InvalidOperationException)
         {
@@ -175,19 +174,22 @@ internal sealed class LaunchOutputCapture
         string source,
         Queue<string> tail,
         StringBuilder lineBuilder,
-        bool lineWasTruncated,
-        SensitiveLogText.LineRedactor redactor)
+        bool lineWasTruncated)
     {
         var line = lineBuilder.ToString();
         if (lineWasTruncated)
         {
-            // Discarded input may contain a quote or only part of a known credential.
-            // Its end cannot be reconstructed safely, so suppress the rest of this stream.
-            redactor.SuppressRemainder();
+            var suffix = maxLineCharacters >= TruncatedLineSuffix.Length
+                ? TruncatedLineSuffix
+                : "…";
+            var contentLength = Math.Max(0, maxLineCharacters - suffix.Length);
+            if (line.Length > contentLength)
+                line = line[..contentLength];
+            line += suffix;
             Interlocked.Exchange(ref wasTruncated, 1);
         }
 
-        var redacted = redactor.RedactLine(line);
+        var redacted = LaunchDiagnosticRedactor.Redact(line, sensitiveValues);
         lineObserver?.Invoke(redacted);
         lock (tailLock)
         {

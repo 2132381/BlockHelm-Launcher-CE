@@ -99,7 +99,7 @@ public sealed class ServerDeploymentTests : TestTempDirectory
     }
 
     [Fact]
-    public async Task ForgeLikeRuntimeInstallsValidArchiveWithoutChecksumMetadata()
+    public async Task ForgeLikeRuntimeDoesNotDownloadOrExecuteInstallerWithoutChecksumMetadata()
     {
         var target = Path.Combine(TempRoot, "forge-missing-checksum");
         var installerBytes = CreateForgeServerInstaller();
@@ -112,10 +112,13 @@ public sealed class ServerDeploymentTests : TestTempDirectory
             new FixedLoaderJavaRuntimeResolver(),
             runner);
 
-        await installer.InstallAsync(CreateForgeServerModpack(), target);
+        var exception = await Assert.ThrowsAsync<InvalidDataException>(() => installer.InstallAsync(
+            CreateForgeServerModpack(),
+            target));
 
-        Assert.True(runner.WasRun);
-        Assert.Contains(
+        Assert.Contains("checksum", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(runner.WasRun);
+        Assert.DoesNotContain(
             handler.RequestedUrls,
             url => url.EndsWith("-installer.jar", StringComparison.Ordinal));
     }
@@ -168,8 +171,6 @@ public sealed class ServerDeploymentTests : TestTempDirectory
         {
             AddEntry(archive, "install_profile.json", """
                 {
-                  "spec": 1,
-                  "minecraft": "1.20.1",
                   "data": {
                     "OUTPUT": {
                       "client": "[com.example:client-output:1.0]",

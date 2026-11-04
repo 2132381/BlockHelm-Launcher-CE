@@ -20,8 +20,7 @@ internal sealed record DownloadFileOptions(
     MinecraftDownloadOperationContext? OperationContext = null,
     string? ManagedRoot = null,
     bool AllowUnverifiedSegmentedDownload = false,
-    bool UseHiddenTemporaryFile = true,
-    Func<string, CancellationToken, Task>? ValidateUnverifiedFile = null)
+    bool UseHiddenTemporaryFile = true)
 {
     public string? ResolveManagedRoot(string destinationPath)
     {

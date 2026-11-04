@@ -90,7 +90,6 @@ private async Task<string> InstallCoreAsync(
             await DownloadInstallerAsync(
                 catalogEntry.InstallerUrl,
                 installerJarPath,
-                minecraftVersion,
                 downloadSourcePreference,
                 cancellationToken,
                 downloadSpeedLimitMbPerSecond,

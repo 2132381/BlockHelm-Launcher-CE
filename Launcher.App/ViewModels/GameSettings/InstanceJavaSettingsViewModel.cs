@@ -31,8 +31,6 @@ namespace Launcher.App.ViewModels.GameSettings;
 
 public sealed partial class InstanceJavaSettingsViewModel : GameSettingsDetailsSectionViewModelBase, IDisposable
 {
-    public override bool UsesFullViewportLayout => true;
-
     private static readonly TimeSpan SaveMergeDelay = TimeSpan.FromMilliseconds(100);
     private readonly InstanceSettingsPersistenceCoordinator persistence;
     private LauncherSettings globalSettings = new();

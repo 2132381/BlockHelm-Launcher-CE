@@ -30,7 +30,8 @@ public sealed class GameVersionService : IGameVersionService
 {
     internal static DownloadRetryOptions VersionCatalogRetryOptions { get; } = new()
     {
-        // 版本目录是交互式元数据；各来源使用较短的超时，查询调度负责启动备用源。
+        // 版本目录是用户正在等待的交互式元数据。首选源失败后立即切换备用源，
+        // 两个来源均不可用时交给页面显示失败并由用户按需刷新。
         MaxAttemptsPerSource = 1,
         ResponseHeadersTimeout = TimeSpan.FromSeconds(5),
         FirstByteTimeout = TimeSpan.FromSeconds(5),
@@ -64,7 +65,7 @@ public sealed class GameVersionService : IGameVersionService
             bandwidthLimiter,
             category: DownloadConcurrencyCategory.Metadata,
             retryOptions: VersionCatalogRetryOptions);
-        var lookup = await executor.ExecuteStaggeredLookupAsync(
+        var manifestResult = await executor.ExecuteAsync(
             "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json",
             downloadSourcePreference,
             categoryHint: "Mojang",
@@ -79,44 +80,37 @@ public sealed class GameVersionService : IGameVersionService
                         "Minecraft version manifest is missing a versions array.");
                 }
 
-                if (versionEntries.Count == 0 || versionEntries.Any(entry => !IsValidVersionEntry(entry)))
+                if (versionEntries.Any(entry => !IsValidVersionEntry(entry)))
                 {
                     throw new DownloadContentValidationException(
                         "Minecraft version manifest contains an invalid version entry.");
                 }
 
-                try
-                {
-                    var versions = versionEntries
-                        .Select(entry => (JsonObject)entry!)
-                        .Select(entry => new MinecraftVersionInfo(
-                            entry["id"]!.GetValue<string>(),
-                            entry["type"]!.GetValue<string>(),
-                            false,
-                            entry["releaseTime"]?.GetValue<DateTimeOffset?>()))
-                        .OrderBy(v => VersionTypeRank(v.Type))
-                        .ThenByDescending(v => v.Type.Equals("Release", StringComparison.OrdinalIgnoreCase) ? VersionSortKey(v.Name) : new Version(0, 0))
-                        .ThenByDescending(v => v.ReleaseTime ?? DateTimeOffset.MinValue)
-                        .ThenByDescending(v => v.Name, StringComparer.OrdinalIgnoreCase)
-                        .ToList();
-                    return (Versions: versions, context.Resolution);
-                }
-                catch (Exception exception) when (exception is FormatException or InvalidOperationException)
-                {
-                    throw new DownloadContentValidationException("Minecraft version manifest contains invalid version metadata.", exception);
-                }
+                return (VersionEntries: versionEntries, context.Resolution);
             },
-            _ => false,
             cancellationToken);
 
-        var manifestResult = lookup.Value;
+        var versions = manifestResult.VersionEntries
+            .Select(entry => entry as JsonObject)
+            .Where(entry => entry is not null)
+            .Select(entry => new MinecraftVersionInfo(
+                entry!["id"]?.GetValue<string>() ?? string.Empty,
+                entry["type"]?.GetValue<string>() ?? string.Empty,
+                false,
+                entry["releaseTime"]?.GetValue<DateTimeOffset?>()))
+            .Where(version => !string.IsNullOrWhiteSpace(version.Name))
+            .OrderBy(v => VersionTypeRank(v.Type))
+            .ThenByDescending(v => v.Type.Equals("Release", StringComparison.OrdinalIgnoreCase) ? VersionSortKey(v.Name) : new Version(0, 0))
+            .ThenByDescending(v => v.ReleaseTime ?? DateTimeOffset.MinValue)
+            .ThenByDescending(v => v.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         logger.LogDebug(
             "Minecraft versions loaded. RequestedSourcePreference={RequestedSourcePreference} ResolvedSourceKind={ResolvedSourceKind} VersionCount={VersionCount}",
             downloadSourcePreference,
             manifestResult.Resolution.ResolvedSourceKind,
-            manifestResult.Versions.Count);
-        return manifestResult.Versions;
+            versions.Count);
+        return versions;
     }
 
     private static int VersionTypeRank(string type)
