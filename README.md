@@ -8,7 +8,7 @@
 
 `BlockHelm Launcher-CE` 是一款面向 Minecraft Java 版玩家的现代化启动器，提供从游戏下载、实例管理、账户登录到资源安装、联机和故障诊断的一体化体验。界面简洁直观，支持丰富的个性化设置，让日常启动和游戏内容管理更加轻松。
 
-注意：`BlockHelm Launcher-CE` 是独立开发的第三方开源启动器，并非 Minecraft 官方产品，也未经 Microsoft、Mojang Studios 或其他第三方平台赞助、认可或背书。
+注意：`BlockHelm Launcher-CE` 是独立开发的第三方开源启动器`BlockHelm Launcher`的社区版，并非 Minecraft 官方产品，也未经 Microsoft、Mojang Studios 或其他第三方平台赞助、认可或背书。
 
 ### 主要功能
 
